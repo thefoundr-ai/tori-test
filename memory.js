@@ -1,19 +1,17 @@
-const { db } = require('./firebase');
+const { db } = require('./updated-firebase');
 
 /**
  * Store a new message in the conversation history
  * @param {string} userId - User identifier
- * @param {string} conversationId - Conversation identifier
  * @param {string} role - Message role ('user' or 'assistant')
  * @param {string} content - Message content
  * @param {string} agentUsed - Agent that processed the message
  * @returns {Promise<string>} - Message ID
  */
-async function storeMessage(userId, conversationId, role, content, agentUsed) {
+async function storeMessage(userId, role, content, agentUsed) {
   try {
-    // Create message document
+    // Create a simpler document structure that doesn't require complex queries
     const messageData = {
-      conversationId,
       userId,
       role,
       content,
@@ -21,15 +19,16 @@ async function storeMessage(userId, conversationId, role, content, agentUsed) {
       agentUsed
     };
     
-    // Add message to Firestore
-    const messageRef = await db.collection('messages').add(messageData);
+    // Use userId as the collection name to avoid complex queries
+    // This creates a separate collection for each user
+    const messageRef = await db.collection(`users/${userId}/messages`).add(messageData);
     
-    // Update conversation metadata
-    const conversationRef = db.collection('conversations').doc(conversationId);
-    await conversationRef.update({
-      updatedAt: new Date(),
-      messageCount: admin.firestore.FieldValue.increment(1)
-    });
+    // Update the user document with last activity timestamp
+    // This is a simple update that doesn't require complex queries
+    await db.collection('users').doc(userId).set({
+      lastActive: new Date(),
+      userPlan: messageData.userPlan || 'free'
+    }, { merge: true });
     
     return messageRef.id;
   } catch (error) {
@@ -39,87 +38,33 @@ async function storeMessage(userId, conversationId, role, content, agentUsed) {
 }
 
 /**
- * Get or create a conversation for a user
- * @param {string} userId - User identifier
- * @param {string} userPlan - User subscription plan ('free' or 'premium')
- * @returns {Promise<Object>} - Conversation object
- */
-async function getOrCreateConversation(userId, userPlan) {
-  try {
-    // Check if user has an active conversation
-    const conversationsRef = db.collection('conversations');
-    const query = conversationsRef
-      .where('userId', '==', userId)
-      .orderBy('updatedAt', 'desc')
-      .limit(1);
-    
-    const querySnapshot = await query.get();
-    
-    // If conversation exists, return it
-    if (!querySnapshot.empty) {
-      const conversation = querySnapshot.docs[0];
-      return {
-        conversationId: conversation.id,
-        ...conversation.data()
-      };
-    }
-    
-    // Otherwise, create a new conversation
-    const newConversation = {
-      userId,
-      userPlan,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      messageCount: 0
-    };
-    
-    const conversationRef = await conversationsRef.add(newConversation);
-    return {
-      conversationId: conversationRef.id,
-      ...newConversation
-    };
-  } catch (error) {
-    console.error('Error getting/creating conversation:', error);
-    throw error;
-  }
-}
-
-/**
  * Get conversation history for a user
- * For premium users: Returns all messages (up to a limit)
- * For free users: Returns only the last message (or none)
+ * For premium users: Returns up to 10 messages
+ * For free users: Returns only the last message
  * @param {string} userId - User identifier
- * @param {string} conversationId - Conversation identifier
  * @param {string} userPlan - User subscription plan ('free' or 'premium')
- * @returns {Promise<Array>} - Array of message objects
+ * @returns {Promise<Array>} - Array of message objects formatted for OpenAI
  */
-async function getConversationHistory(userId, conversationId, userPlan) {
+async function getConversationHistory(userId, userPlan) {
   try {
-    const messagesRef = db.collection('messages');
-    let query;
+    // Determine how many messages to retrieve based on user plan
+    const limit = userPlan === 'premium' ? 10 : 1;
     
-    // For premium users, get more conversation history
-    if (userPlan === 'premium') {
-      // Get last 10 messages for context
-      query = messagesRef
-        .where('conversationId', '==', conversationId)
-        .orderBy('timestamp', 'desc')
-        .limit(10);
-    } else {
-      // For free users, get only the last message
-      query = messagesRef
-        .where('conversationId', '==', conversationId)
-        .orderBy('timestamp', 'desc')
-        .limit(1);
-    }
+    // Simple query that only requires a single collection and sorting by timestamp
+    // This avoids the need for complex composite indexes
+    const messagesRef = db.collection(`users/${userId}/messages`)
+      .orderBy('timestamp', 'desc')
+      .limit(limit * 2); // Multiply by 2 to account for both user and assistant messages
     
-    const querySnapshot = await query.get();
+    const querySnapshot = await messagesRef.get();
+    
+    // Format messages for OpenAI (only need role and content)
     const messages = [];
-    
     querySnapshot.forEach((doc) => {
+      const data = doc.data();
       messages.push({
-        messageId: doc.id,
-        ...doc.data()
+        role: data.role,
+        content: data.content
       });
     });
     
@@ -127,12 +72,12 @@ async function getConversationHistory(userId, conversationId, userPlan) {
     return messages.reverse();
   } catch (error) {
     console.error('Error getting conversation history:', error);
-    throw error;
+    // Return empty array instead of throwing error to make the function more resilient
+    return [];
   }
 }
 
 module.exports = {
   storeMessage,
-  getOrCreateConversation,
   getConversationHistory
 };
