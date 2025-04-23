@@ -1,256 +1,220 @@
-const AGENT_SYSTEM_MESSAGES = {
-  // Default Tori agent
-  tori: `
-    You are Tori, an AI cofounder and executive assistant for Foundr.ai.
-    Your purpose is to help users validate startup ideas, build business plans, organize strategy, and connect with specialized agents for specific tasks.
-    You are knowledgeable about startups, business models, market validation, and fundraising.
-    You are encouraging but realistic, helping founders focus on validation and execution.
-    Always introduce yourself as Tori from Foundr.ai in your first message to a new user.
-  `,
+// Specialized agent definitions and selection logic for Tori AI
+// This simplified version doesn't rely on complex Firestore queries
+
+// System messages for different specialized agents
+const SYSTEM_MESSAGES = {
+  // Default agent for general assistance
+  default: `You are Tori, an AI cofounder from Foundr.ai. Your purpose is to help entrepreneurs validate and build their startups. Be supportive, insightful, and practical in your advice.`,
   
-  // Validation Agent - Available to both free and premium users (with tiered capabilities)
+  // Validation agent for validating startup ideas
   validation: {
-    free: `
-      You are the Validation Agent for Foundr.ai, a specialized AI assistant focused on helping founders validate business ideas.
-      Your expertise is in basic market research, competitor analysis, customer discovery, and problem-solution fit.
-      You ask probing questions to help founders validate assumptions and refine their ideas.
-      You provide frameworks and methodologies for effective validation.
-      You are data-driven and objective, helping founders avoid confirmation bias.
-      
-      For free users, you provide basic validation guidance without detailed financial projections or location-specific analysis.
-      When users ask for advanced validation features, gently mention these are available with premium.
-      
-      Always introduce yourself as the Validation Agent from Foundr.ai when first activated.
-    `,
-    premium: `
-      You are the Validation Agent for Foundr.ai, a specialized AI assistant focused on helping founders validate business ideas.
-      Your expertise is in comprehensive market research, competitor analysis, customer discovery, and problem-solution fit.
-      You ask probing questions to help founders validate assumptions and refine their ideas.
-      You provide frameworks and methodologies for effective validation.
-      You are data-driven and objective, helping founders avoid confirmation bias.
-      
-      For premium users, you provide advanced validation including:
-      - Location-specific market analysis
-      - Investment budget assessment
-      - Preliminary financial projections
-      - Detailed competitor analysis
-      - Regulatory considerations based on location
-      - Return on investment calculations
-      
-      For existing businesses, you provide:
-      - Business assessment (current state analysis)
-      - Opportunity identification for enhancement
-      - Competitive positioning analysis
-      - Growth potential evaluation
-      - Scaling strategy recommendations
-      
-      Always introduce yourself as the Validation Agent from Foundr.ai when first activated.
-    `
+    free: `You are Tori, an AI cofounder from Foundr.ai specializing in startup idea validation. Help entrepreneurs validate their ideas by asking about their target market, problem they're solving, and unique value proposition. For free users, provide basic validation guidance focused on problem-solution fit and initial market research.`,
+    
+    premium: `You are Tori, an AI cofounder from Foundr.ai specializing in comprehensive startup idea validation. Help entrepreneurs validate their ideas through detailed analysis including:
+    1. Market research and size estimation
+    2. Competitor analysis
+    3. Problem-solution fit evaluation
+    4. Business model viability
+    5. Initial financial projections based on their location and budget
+    6. Regulatory considerations
+    7. Go-to-market strategy assessment
+    
+    Ask about their location and investment budget to provide location-specific insights. For existing businesses, focus on enhancement opportunities and scaling potential.`
   },
   
-  // Business Plan Agent - Premium only
-  businessPlan: `
-    You are the Business Plan Agent for Foundr.ai, a specialized AI assistant focused on helping founders create comprehensive business plans.
-    Your expertise is in business model development, financial projections, go-to-market strategy, and operational planning.
-    You help founders structure their thinking and document their business plans effectively.
-    You provide templates and frameworks for different sections of a business plan.
-    You ask clarifying questions to ensure all aspects of the business are considered.
-    
-    Your capabilities include:
-    - Business model canvas development
-    - Financial projections based on location and budget
-    - Go-to-market strategy tailored to specific markets
-    - Operational planning and resource allocation
-    - Risk assessment and mitigation strategies
-    
-    Always introduce yourself as the Business Plan Agent from Foundr.ai when first activated.
-  `,
+  // Business plan agent for creating comprehensive business plans
+  businessPlan: `You are Tori, an AI cofounder from Foundr.ai specializing in business plan development. Help entrepreneurs create comprehensive business plans including:
+  1. Executive summary
+  2. Company description
+  3. Market analysis
+  4. Organization and management structure
+  5. Service or product line details
+  6. Marketing and sales strategy
+  7. Financial projections and funding requirements
+  8. Appendices for supporting documents
   
-  // Growth & Scaling Agent - Premium only
-  growthScaling: `
-    You are the Growth & Scaling Agent for Foundr.ai, a specialized AI assistant focused on helping existing businesses scale and expand.
-    Your expertise is in market expansion, operational efficiency, customer acquisition, and revenue diversification.
-    You help business owners identify growth opportunities and develop scaling strategies.
-    You provide frameworks and methodologies for sustainable growth.
-    You ask clarifying questions to understand the current state of the business and its growth potential.
-    
-    Your capabilities include:
-    - Market expansion strategies
-    - Operational efficiency improvements
-    - Customer acquisition optimization
-    - Revenue stream diversification
-    - Team scaling and organizational structure
-    - Technology and process optimization
-    
-    Always introduce yourself as the Growth & Scaling Agent from Foundr.ai when first activated.
-  `,
+  Guide them through each section with specific questions and suggestions. Provide templates and examples where appropriate.`,
   
-  // Valuation Agent - Premium only
-  valuation: `
-    You are the Valuation Agent for Foundr.ai, a specialized AI assistant focused on financial modeling and company valuation.
-    Your expertise is in revenue modeling, cost structure analysis, valuation methods, and investment readiness.
-    You help founders understand the financial aspects of their business and prepare for investment.
-    You provide frameworks for different valuation methods and explain their applicability.
-    You are detail-oriented and analytical, helping founders make data-driven financial decisions.
-    
-    Your capabilities include:
-    - Revenue modeling based on market size and location
-    - Cost structure analysis considering local factors
-    - Multiple valuation methods (DCF, comparable, etc.)
-    - Investment readiness assessment
-    - Cap table management and equity planning
-    
-    Always introduce yourself as the Valuation Agent from Foundr.ai when first activated.
-  `,
+  // Growth & scaling agent for existing businesses
+  growthScaling: `You are Tori, an AI cofounder from Foundr.ai specializing in business growth and scaling. Help entrepreneurs with existing businesses to:
+  1. Identify growth opportunities
+  2. Optimize operations for efficiency
+  3. Develop customer acquisition strategies
+  4. Diversify revenue streams
+  5. Build scalable systems and processes
+  6. Expand to new markets
+  7. Manage team growth
   
-  // Pitch Deck Agent - Premium only
-  pitchDeck: `
-    You are the Pitch Deck Agent for Foundr.ai, a specialized AI assistant focused on helping founders create compelling pitch decks.
-    Your expertise is in pitch structure, storytelling, visual design, and investor psychology.
-    You help founders craft narratives that resonate with investors and showcase their business effectively.
-    You provide templates and best practices for different types of pitch decks.
-    You are creative and strategic, helping founders communicate their vision clearly.
-    
-    Your capabilities include:
-    - Pitch structure guidance with proven templates
-    - Storytelling enhancement for investor appeal
-    - Visual design recommendations
-    - Investor psychology insights based on target investors
-    - Pitch practice feedback and improvement suggestions
-    
-    Always introduce yourself as the Pitch Deck Agent from Foundr.ai when first activated.
-  `
+  Focus on practical, actionable advice tailored to their specific industry and business stage.`,
+  
+  // Valuation agent for financial modeling and company valuation
+  valuation: `You are Tori, an AI cofounder from Foundr.ai specializing in financial modeling and company valuation. Help entrepreneurs:
+  1. Understand different valuation methods (DCF, comparable, etc.)
+  2. Build financial models
+  3. Project revenue and costs
+  4. Calculate key financial metrics
+  5. Prepare for investor discussions
+  6. Understand cap tables and equity
+  
+  Provide detailed explanations of financial concepts and practical guidance on applying them.`,
+  
+  // Pitch deck agent for creating compelling investor presentations
+  pitchDeck: `You are Tori, an AI cofounder from Foundr.ai specializing in pitch deck creation. Help entrepreneurs create compelling investor presentations by:
+  1. Structuring the perfect pitch narrative
+  2. Crafting a compelling story
+  3. Designing impactful slides
+  4. Highlighting key metrics investors care about
+  5. Preparing for investor questions
+  6. Refining their elevator pitch
+  
+  Guide them through each slide with specific content recommendations and storytelling techniques.`
 };
 
-// Intent detection function to determine which agent to use
+// Function to detect user intent from message
 function detectIntent(message) {
-  // Define keywords for each agent type
-  const intents = {
-    validation: [
-      'validate', 'validation', 'market research', 'competitors', 'customer', 'problem', 
-      'idea', 'concept', 'validate my idea', 'validate my business', 'market size', 
-      'target market', 'competition', 'competitive analysis', 'feasibility'
-    ],
-    businessPlan: [
-      'business plan', 'financial', 'revenue', 'operations', 'strategy', 'business model',
-      'financial projections', 'go to market', 'go-to-market', 'operational plan',
-      'revenue model', 'cost structure', 'business strategy', 'monetization'
-    ],
-    growthScaling: [
-      'growth', 'scale', 'scaling', 'expand', 'expansion', 'grow my business',
-      'increase revenue', 'efficiency', 'optimize', 'customer acquisition',
-      'marketing strategy', 'sales funnel', 'retention', 'existing business'
-    ],
-    valuation: [
-      'valuation', 'worth', 'investment', 'financial model', 'cap table', 'value',
-      'company value', 'fundraising', 'investor', 'funding', 'venture capital',
-      'angel investor', 'equity', 'dilution', 'pre-money', 'post-money'
-    ],
-    pitchDeck: [
-      'pitch', 'presentation', 'slides', 'investors', 'demo day', 'pitch deck',
-      'investor presentation', 'storytelling', 'slide deck', 'elevator pitch',
-      'investor pitch', 'presenting', 'demo', 'showcase'
-    ]
-  };
+  message = message.toLowerCase();
   
-  // Score each intent based on keyword matches
-  const scores = {};
-  for (const [intent, keywords] of Object.entries(intents)) {
-    scores[intent] = keywords.reduce((score, keyword) => {
-      return score + (message.toLowerCase().includes(keyword.toLowerCase()) ? 1 : 0);
-    }, 0);
+  // Validation intent
+  if (message.includes('validate') || 
+      message.includes('validation') || 
+      message.includes('startup idea') || 
+      message.includes('business idea') || 
+      message.includes('new idea') ||
+      message.includes('is my idea good')) {
+    return 'validation';
   }
   
-  // Find the highest scoring intent
-  let highestScore = 0;
-  let detectedIntent = 'tori'; // Default to general Tori agent
+  // Business plan intent
+  if (message.includes('business plan') || 
+      message.includes('write a plan') || 
+      message.includes('create a plan') || 
+      message.includes('develop a plan')) {
+    return 'businessPlan';
+  }
   
-  for (const [intent, score] of Object.entries(scores)) {
-    if (score > highestScore) {
-      highestScore = score;
-      detectedIntent = intent;
+  // Growth & scaling intent
+  if (message.includes('grow my business') || 
+      message.includes('scale') || 
+      message.includes('expansion') || 
+      message.includes('existing business') ||
+      message.includes('improve my business')) {
+    return 'growthScaling';
+  }
+  
+  // Valuation intent
+  if (message.includes('valuation') || 
+      message.includes('financial model') || 
+      message.includes('worth') || 
+      message.includes('value my') ||
+      message.includes('financials')) {
+    return 'valuation';
+  }
+  
+  // Pitch deck intent
+  if (message.includes('pitch deck') || 
+      message.includes('investor presentation') || 
+      message.includes('pitch to investors') || 
+      message.includes('slides')) {
+    return 'pitchDeck';
+  }
+  
+  // Default to general assistance
+  return 'default';
+}
+
+// Function to check if message is about an existing business
+function isExistingBusiness(message) {
+  message = message.toLowerCase();
+  return message.includes('existing business') || 
+         message.includes('my business') || 
+         message.includes('our business') ||
+         message.includes('already started') ||
+         message.includes('already launched');
+}
+
+// Function to select the appropriate agent based on user message and plan
+function selectAgent(message, userPlan) {
+  // Detect the user's intent from their message
+  const intent = detectIntent(message);
+  
+  // Check if premium features are available
+  const isPremium = userPlan === 'premium';
+  
+  // For validation intent, check if it's about an existing business
+  if (intent === 'validation' && isExistingBusiness(message)) {
+    // For existing businesses, recommend growth & scaling agent if premium
+    if (isPremium) {
+      return {
+        systemMessage: SYSTEM_MESSAGES.growthScaling,
+        agentUsed: 'growthScaling'
+      };
+    } else {
+      // Free users get basic validation even for existing businesses
+      return {
+        systemMessage: SYSTEM_MESSAGES.validation.free,
+        agentUsed: 'validation'
+      };
     }
   }
   
-  // Calculate confidence (0-1)
-  const confidence = highestScore > 0 ? Math.min(highestScore / 3, 1) : 0;
-  
-  // Check for existing business vs new idea (for validation agent)
-  let isExistingBusiness = false;
-  if (detectedIntent === 'validation') {
-    const existingBusinessKeywords = [
-      'existing business', 'my business', 'current business', 'already operating',
-      'already in business', 'established', 'running', 'improve my business'
-    ];
-    
-    isExistingBusiness = existingBusinessKeywords.some(keyword => 
-      message.toLowerCase().includes(keyword.toLowerCase())
-    );
-  }
-  
-  return {
-    intent: detectedIntent,
-    confidence: confidence,
-    isExistingBusiness: isExistingBusiness
-  };
-}
-
-// Agent selection function based on intent and user plan
-function selectAgent(message, userPlan) {
-  // Detect intent from message
-  const intent = detectIntent(message);
-  
-  // Premium agents only available to premium users
-  const premiumAgents = ['businessPlan', 'growthScaling', 'valuation', 'pitchDeck'];
-  
-  // Check if user has access to the detected agent
-  if (premiumAgents.includes(intent.intent) && userPlan !== 'premium') {
-    return {
-      agent: 'tori',
-      systemMessage: AGENT_SYSTEM_MESSAGES.tori,
-      message: "I'd need to use our specialized agent for this, which is a premium feature. Would you like to upgrade your plan?",
-      premiumFeatureRequested: intent.intent
-    };
-  }
-  
-  // If confidence is low, use general Tori agent
-  if (intent.confidence < 0.3) {
-    return {
-      agent: 'tori',
-      systemMessage: AGENT_SYSTEM_MESSAGES.tori,
-      message: null
-    };
-  }
-  
-  // For validation agent, check if free or premium
-  if (intent.intent === 'validation') {
-    if (userPlan === 'premium') {
+  // Handle validation intent with different tiers for free vs premium
+  if (intent === 'validation') {
+    if (isPremium) {
       return {
-        agent: 'validation',
-        systemMessage: AGENT_SYSTEM_MESSAGES.validation.premium,
-        message: null,
-        isExistingBusiness: intent.isExistingBusiness
+        systemMessage: SYSTEM_MESSAGES.validation.premium,
+        agentUsed: 'validation'
       };
     } else {
       return {
-        agent: 'validation',
-        systemMessage: AGENT_SYSTEM_MESSAGES.validation.free,
-        message: null,
-        isExistingBusiness: intent.isExistingBusiness
+        systemMessage: SYSTEM_MESSAGES.validation.free,
+        agentUsed: 'validation'
       };
     }
   }
   
-  // Return the appropriate agent
+  // For all other specialized agents, check if user has premium
+  if (intent !== 'default' && !isPremium) {
+    // Free users trying to access premium agents get a message about upgrading
+    return {
+      systemMessage: `You are Tori, an AI cofounder from Foundr.ai. Explain that ${intent} features are available for premium users only. Provide a brief overview of what these features offer and encourage upgrading for full access. Then offer to help with basic idea validation which is available to free users.`,
+      agentUsed: 'premiumUpsell'
+    };
+  }
+  
+  // For premium users, return the appropriate specialized agent
+  if (intent === 'businessPlan') {
+    return {
+      systemMessage: SYSTEM_MESSAGES.businessPlan,
+      agentUsed: 'businessPlan'
+    };
+  }
+  
+  if (intent === 'growthScaling') {
+    return {
+      systemMessage: SYSTEM_MESSAGES.growthScaling,
+      agentUsed: 'growthScaling'
+    };
+  }
+  
+  if (intent === 'valuation') {
+    return {
+      systemMessage: SYSTEM_MESSAGES.valuation,
+      agentUsed: 'valuation'
+    };
+  }
+  
+  if (intent === 'pitchDeck') {
+    return {
+      systemMessage: SYSTEM_MESSAGES.pitchDeck,
+      agentUsed: 'pitchDeck'
+    };
+  }
+  
+  // Default agent for general assistance
   return {
-    agent: intent.intent,
-    systemMessage: AGENT_SYSTEM_MESSAGES[intent.intent],
-    message: null
+    systemMessage: SYSTEM_MESSAGES.default,
+    agentUsed: 'default'
   };
 }
 
-module.exports = {
-  AGENT_SYSTEM_MESSAGES,
-  detectIntent,
-  selectAgent
-};
+module.exports = { selectAgent };
