@@ -1,4 +1,4 @@
-const { db } = require('./updated-firebase');
+const { db } = require('./firebase');
 
 /**
  * Store a new message in the conversation history
