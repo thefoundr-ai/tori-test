@@ -1,77 +1,70 @@
 const express = require('express');
-const app = express();
-const port = process.env.PORT || 3000;
+const cors = require('cors');
+const OpenAI = require('openai');
 
+const app = express();
+app.use(cors());
 app.use(express.json());
 
-// Health check endpoint
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', version: '1.0.0' });
+// Initialize OpenAI with your API key
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
 });
 
-// Tori API endpoint
-app.post('/tori', (req, res) => {
+// Define Tori's system message (this makes it a specialized AI cofounder)
+const TORI_SYSTEM_MESSAGE = `
+You are Tori, an AI cofounder and executive assistant for Foundr.ai.
+Your purpose is to help users validate startup ideas, build business plans, organize strategy, and connect with specialized agents for specific tasks.
+You are knowledgeable about startups, business models, market validation, and fundraising.
+You are encouraging but realistic, helping founders focus on validation and execution.
+Always introduce yourself as Tori from Foundr.ai in your first message to a new user.
+`;
+
+app.post('/tori', async (req, res) => {
   try {
-    // Basic validation
     const { userId, message, userPlan } = req.body;
     
-    if (!userId) {
-      return res.status(400).json({
-        error: {
-          message: 'Missing required field: userId',
-          status: 400
-        }
-      });
+    if (!userId || !message) {
+      return res.status(400).json({ error: 'Missing required parameters' });
     }
     
-    if (!message) {
-      return res.status(400).json({
-        error: {
-          message: 'Missing required field: message',
-          status: 400
-        }
-      });
-    }
+    // Determine if user has access to premium features
+    const isPremium = userPlan === 'premium';
     
-    // Default to free plan if not specified
-    const plan = userPlan || 'free';
+    // Call OpenAI API
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4-turbo", // You can change this to gpt-3.5-turbo to reduce costs
+      messages: [
+        { role: "system", content: TORI_SYSTEM_MESSAGE },
+        { role: "user", content: message }
+      ],
+      temperature: 0.7,
+    });
     
-    // Simple response for testing
-    const response = {
-      response: `Hello! I'm Tori, your AI cofounder assistant. You said: "${message}". I'm currently running in ${plan} mode.`,
-      agentUsed: 'tori',
+    // Extract the response
+    const response = completion.choices[0].message.content;
+    
+    // Return the response along with metadata
+    return res.json({
+      response,
+      agentUsed: "tori",
       premiumFeatures: {
-        longTermMemoryUsed: plan === 'premium',
-        expandedPromptLength: plan === 'premium',
-        specializedAgentsAvailable: plan === 'premium' ? 
-          ['valuation', 'blueprint', 'pitch', 'mindfulness'] : 
-          ['blueprint']
-      }
-    };
-    
-    // Return the response
-    res.status(200).json(response);
-  } catch (error) {
-    console.error(`Error processing Tori request: ${error.message}`);
-    res.status(500).json({
-      error: {
-        message: 'An unexpected error occurred',
-        status: 500
+        available: isPremium,
+        specializedAgents: isPremium,
+        documentGeneration: isPremium,
+        conversationMemory: isPremium
       }
     });
+    
+  } catch (error) {
+    console.error('Error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// Simple echo endpoint
-app.post('/echo', (req, res) => {
-  res.json({ 
-    message: `You said: ${req.body.message || 'nothing'}`,
-    timestamp: new Date().toISOString()
-  });
-});
-
-app.listen(port, () => {
-  console.log(`Tori backend server running on port ${port}`);
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
 });
 
 module.exports = app;
