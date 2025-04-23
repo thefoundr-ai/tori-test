@@ -1,110 +1,114 @@
-// Import required modules
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const OpenAI = require('openai');
-require('dotenv').config();
-
-// Import Firebase and memory modules
-const { db } = require('./firebase');
-const { getOrCreateConversation, storeMessage, getConversationHistory } = require('./memory');
-
-// Import specialized agents
-const { selectAgent } = require('./agents');
-
-// Initialize Express app
-const app = express();
-app.use(cors());
-app.use(express.json());
+const { selectAgent } = require('./simplified-agents');
+const { storeMessage, getConversationHistory } = require('./simplified-memory');
 
 // Initialize OpenAI
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
 
-// Tori endpoint
+// Initialize Express
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+// Fallback in-memory conversation storage if Firebase fails
+const fallbackConversations = {};
+
+// Main endpoint for Tori AI assistant
 app.post('/tori', async (req, res) => {
   try {
-    // Extract request data
-    const { message, userId, userPlan = 'free' } = req.body;
+    const { userId, message, userPlan = 'free' } = req.body;
     
-    if (!message || !userId) {
-      return res.status(400).json({ error: 'Message and userId are required' });
+    if (!userId || !message) {
+      return res.status(400).json({ error: 'userId and message are required' });
     }
     
-    // Get or create conversation
-    const conversation = await getOrCreateConversation(userId, userPlan);
+    // Select the appropriate specialized agent based on message and user plan
+    const { systemMessage, agentUsed } = selectAgent(message, userPlan);
     
-    // Get conversation history based on user plan
-    const conversationHistory = await getConversationHistory(userId, conversation.id, userPlan);
+    let conversationHistory = [];
+    let usingFirebase = true;
     
-    // Select the appropriate agent based on message content and user plan
-    const selectedAgent = selectAgent(message, userPlan);
+    try {
+      // Try to get conversation history from Firebase
+      conversationHistory = await getConversationHistory(userId, userPlan);
+      
+      // Store user message in Firebase
+      await storeMessage(userId, 'user', message, agentUsed);
+    } catch (error) {
+      // If Firebase fails, fall back to in-memory storage
+      console.error('Firebase error, using fallback memory:', error);
+      usingFirebase = false;
+      
+      // Initialize conversation for this user if it doesn't exist
+      if (!fallbackConversations[userId]) {
+        fallbackConversations[userId] = [];
+      }
+      
+      // Store user message in fallback memory
+      fallbackConversations[userId].push({ role: 'user', content: message });
+      
+      // Get conversation history from fallback memory (limited based on user plan)
+      const historyLimit = userPlan === 'premium' ? 10 : 1;
+      conversationHistory = fallbackConversations[userId].slice(-historyLimit * 2);
+    }
     
     // Prepare messages for OpenAI
     const messages = [
-      { role: "system", content: selectedAgent.systemMessage },
+      { role: 'system', content: systemMessage },
+      ...conversationHistory
     ];
-    
-    // Add conversation history to messages (if available)
-    if (conversationHistory.length > 0) {
-      conversationHistory.forEach(msg => {
-        messages.push({ role: msg.role, content: msg.content });
-      });
-    }
-    
-    // Add the current user message
-    messages.push({ role: "user", content: message });
-    
-    // If there's a specific message to include from agent selection (e.g., premium feature notice)
-    if (selectedAgent.message) {
-      // We'll handle this in the response instead of modifying the OpenAI prompt
-    }
     
     // Call OpenAI API
     const completion = await openai.chat.completions.create({
-      model: "gpt-4-turbo",
+      model: 'gpt-4-turbo',
       messages: messages,
       temperature: 0.7,
+      max_tokens: 1000
     });
     
-    // Extract the response
-    let responseContent = completion.choices[0].message.content;
+    // Get the assistant's response
+    const assistantResponse = completion.choices[0].message.content;
     
-    // If there's a specific message from agent selection, prepend it to the response
-    if (selectedAgent.message) {
-      responseContent = selectedAgent.message + "\n\n" + responseContent;
+    try {
+      if (usingFirebase) {
+        // Store assistant response in Firebase
+        await storeMessage(userId, 'assistant', assistantResponse, agentUsed);
+      } else {
+        // Store assistant response in fallback memory
+        fallbackConversations[userId].push({ role: 'assistant', content: assistantResponse });
+      }
+    } catch (error) {
+      console.error('Error storing assistant response:', error);
+      // Continue even if storing the response fails
     }
     
-    // Store the user message in Firebase
-    await storeMessage(conversation.id, userId, "user", message, selectedAgent.agent);
-    
-    // Store the assistant response in Firebase
-    await storeMessage(conversation.id, userId, "assistant", responseContent, selectedAgent.agent);
-    
-    // Determine which premium features are available based on user plan
-    const premiumFeatures = {
-      available: userPlan === 'premium',
-      specializedAgents: userPlan === 'premium',
-      documentGeneration: userPlan === 'premium',
-      conversationMemory: userPlan === 'premium'
-    };
-    
-    // Send the response
-    res.json({
-      response: responseContent,
-      agentUsed: selectedAgent.agent,
-      premiumFeatures: premiumFeatures
+    // Return response with metadata
+    return res.json({
+      message: assistantResponse,
+      agentUsed: agentUsed,
+      conversationMemory: true,
+      storageType: usingFirebase ? 'firebase' : 'fallback',
+      premiumFeatures: {
+        extendedMemory: userPlan === 'premium',
+        specializedAgents: userPlan === 'premium',
+        detailedAnalysis: userPlan === 'premium'
+      }
     });
     
   } catch (error) {
     console.error('Error processing request:', error);
-    res.status(500).json({ error: 'An error occurred while processing your request' });
+    return res.status(500).json({ error: 'An error occurred while processing your request', details: error.message });
   }
 });
 
 // Health check endpoint
 app.get('/', (req, res) => {
-  res.send('Tori AI assistant backend is running');
+  res.send('Tori AI API is running');
 });
 
 // Start the server
@@ -112,3 +116,5 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });
+
+module.exports = app;
