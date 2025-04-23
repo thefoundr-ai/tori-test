@@ -2,8 +2,8 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const OpenAI = require('openai');
-const { selectAgent } = require('./simplified-agents');
-const { storeMessage, getConversationHistory } = require('./simplified-memory');
+const { selectAgent } = require('./agents');
+const { storeMessage, getConversationHistory } = require('./memory');
 
 // Initialize OpenAI
 const openai = new OpenAI({
