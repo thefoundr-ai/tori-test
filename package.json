@@ -1,20 +1,4 @@
-{
-  "name": "tori-test",
-  "version": "1.0.0",
-  "description": "Tori AI cofounder assistant",
-  "main": "index.js",
-  "scripts": {
-    "start": "node index.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "dependencies": {
-    "express": "^4.18.2",
-    "cors": "^2.8.5",
-    "openai": "^4.20.1",
-    "dotenv": "^16.3.1",
-    "firebase-admin": "^11.10.1"
-  },
-  "engines": {
-    "node": ">=14"
-  }
+// Deprecated file. No longer in use.
+export default function handler(req, res) {
+  return res.status(410).json({ message: "This endpoint is deprecated." });
 }
